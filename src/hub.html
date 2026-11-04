@@ -309,6 +309,7 @@ button.carimbo:hover{background:var(--papel)}
         <option value="">Todos os sistemas</option>
         <option value="SmartBus">SmartBus</option>
         <option value="Tallos">Tallos</option>
+        <option value="ChatPro">ChatPro</option>
         <option value="Outros">Outros</option>
       </select>
       <label class="chk"><input type="checkbox" id="scr-so-desligados"> Só desligados</label>
@@ -512,7 +513,7 @@ button.carimbo:hover{background:var(--papel)}
       $('#edge-aviso-texto').textContent = `Primeiro uso no ${NV()}: o Painel trabalha com uma cópia dos perfis do seu ${NV()}, com os logins. O seu ${NV()} normal continua igual. Clique para copiar (o ${NV()} precisa estar fechado, eu fecho para você).`;
     } else aviso.hidden = true;  }
 
-  const ORDEM_GRUPO = { SmartBus: 0, Tallos: 1, Outros: 2 };
+  const ORDEM_GRUPO = { SmartBus: 0, Tallos: 1, ChatPro: 2, Outros: 3 };
   function scriptsFiltrados() {
     const busca = $('#scr-busca').value.trim().toLowerCase();
     const grupo = $('#scr-grupo').value;
@@ -520,7 +521,7 @@ button.carimbo:hover{background:var(--papel)}
     return (E.scripts || [])
       .filter(s => (!busca || (s.nome + ' ' + s.descricao).toLowerCase().includes(busca)) &&
         (!grupo || s.grupo === grupo) && (!soDesl || !s.ativo))
-      .sort((a, b) => (ORDEM_GRUPO[a.grupo] ?? 3) - (ORDEM_GRUPO[b.grupo] ?? 3) || a.nome.localeCompare(b.nome, 'pt-BR'));
+      .sort((a, b) => (ORDEM_GRUPO[a.grupo] ?? 4) - (ORDEM_GRUPO[b.grupo] ?? 4) || a.nome.localeCompare(b.nome, 'pt-BR'));
   }
 
   function renderScripts() {

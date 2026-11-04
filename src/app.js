@@ -128,7 +128,11 @@ const PASTA_MODULOS = path.join(PASTA_SCRIPTS, 'modulos');
 // Grava os módulos que vêm com o app na pasta. Se o arquivo em disco é uma versão
 // antiga sem edição, troca pela nova; se você editou, mantém a sua versão.
 // Módulos que já vieram no app e foram tirados: apaga o arquivo e o liga/desliga deles.
-const MODULOS_RETIRADOS = ['mod-leitor_documento', 'mod-idade_nascimento', 'mod-arrasto_promo'];
+const MODULOS_RETIRADOS = ['mod-leitor_documento', 'mod-idade_nascimento', 'mod-arrasto_promo',
+    'mod-alarme_flutuante', 'mod-colar_trecho_auto', 'mod-guanabara_print_horarios', 'mod-horario-servico',
+    'mod-preencher-email', 'mod-preencher_passageiros', 'mod-remover_acentos_nomes', 'mod-reserva_automatica',
+    'mod-smartbus_copiar_clique', 'mod-tallos_30min', 'mod-tallos_botoes_mensagens',
+    'mod-tallos_ocultar_botoes_barra', 'mod-tallos_ocultar_cliente'];
 
 function prepararArquivosScripts() {
     fs.mkdirSync(PASTA_MODULOS, { recursive: true });
@@ -137,6 +141,7 @@ function prepararArquivosScripts() {
         delete config.scripts[id];
         delete config.hashes[id];
     }
+    config.modulosRemovidos = config.modulosRemovidos.filter(id => !MODULOS_RETIRADOS.includes(id));
     for (const e of EMBUTIDOS) {
         const arq = path.join(PASTA_MODULOS, e.arquivo);
         const hNovo = sha(e.fonte);
