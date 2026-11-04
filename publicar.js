@@ -27,7 +27,7 @@ const api = async (metodo, url, corpo, tipo = 'application/json') => {
 
 (async () => {
     for (const f of ['latest.yml', instalador]) fs.rmSync(path.join('out', f), { force: true });
-    execSync('npm run build && electron-builder --win --publish never', { stdio: 'inherit' });
+    execSync('npm run build && npx electron-builder --win --publish never', { stdio: 'inherit' });
     for (const f of arquivos) if (!fs.existsSync(f)) throw new Error('Não foi gerado: ' + f);
     if (!fs.readFileSync('out/latest.yml', 'utf8').includes(`version: ${versao}`)) throw new Error('out/latest.yml não é da versão ' + versao);
 
