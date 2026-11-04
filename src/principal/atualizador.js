@@ -58,7 +58,8 @@ async function verificar() {
 
 function instalarAgora() {
     if (estado.situacao !== 'pronta') return;
-    autoUpdater.quitAndInstall();
+    // Silencioso e reabrindo o app: sem isso o NSIS mostra o assistente de instalação inteiro.
+    autoUpdater.quitAndInstall(true, true);
 }
 
 const obterEstado = () => estado;
