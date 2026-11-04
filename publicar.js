@@ -36,7 +36,7 @@ const api = async (metodo, url, corpo, tipo = 'application/json') => {
     if (existentes.some(r => r.tag_name === tag)) throw new Error(`Já existe a release ${tag}. Aumente a "version" no package.json.`);
 
     // Cria como rascunho, sobe os arquivos e só então publica: ninguém recebe uma release pela metade.
-    const rel = await api('POST', `${base}/releases`, JSON.stringify({ tag_name: tag, target_commitish: 'main', name: versao, draft: true }));
+    const rel = await api('POST', `${base}/releases`, JSON.stringify({ tag_name: tag, target_commitish: 'main', name: `${pkg.build.productName} ${versao}`, body: process.env.NOTAS || `${pkg.build.productName} ${versao}`, draft: true }));
     for (const f of arquivos) {
         console.log('Enviando', path.basename(f), `(${Math.round(fs.statSync(f).size / 1048576)} MB)...`);
         await api('POST', `https://uploads.github.com/repos/${owner}/${repo}/releases/${rel.id}/assets?name=${encodeURIComponent(path.basename(f))}`,

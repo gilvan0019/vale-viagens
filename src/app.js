@@ -1,6 +1,6 @@
 // Painel de Scripts — núcleo do app (roda no processo principal do Electron).
 // Abre o Edge com a porta de controle ligada, nos perfis já existentes
-// (Gilmario 1–6 para a SmartBus, Gilmario para a Tallos), e injeta o
+// (Perfil 1–6 para a SmartBus, Perfil 1 para a Tallos, até escanear), e injeta o
 // Painel de Scripts nas abas da SmartBus e da Tallos.
 'use strict';
 
@@ -33,8 +33,8 @@ const SITES = Object.assign({
 }, process.env.PAINEL_SITES ? JSON.parse(process.env.PAINEL_SITES) : {});
 
 // Perfis do Edge usados por cada sistema (pelo nome que aparece no Edge)
-const PERFIS_SMARTBUS_PADRAO = ['Gilmario 1', 'Gilmario 2', 'Gilmario 3', 'Gilmario 4', 'Gilmario 5', 'Gilmario 6'];
-const PERFIL_TALLOS = 'Gilmario';
+const PERFIS_SMARTBUS_PADRAO = ['Perfil 1', 'Perfil 2', 'Perfil 3', 'Perfil 4', 'Perfil 5', 'Perfil 6'];
+const PERFIL_TALLOS = 'Perfil 1';
 
 const K = { painelEstado: 'tmm_painel_scripts_state_v1' };
 
@@ -1060,6 +1060,96 @@ async function trocarPerfilApp(id) {
     return { aoVivo };
 }
 
+// ---------- Exportar e importar perfis (levar para outra máquina) ----------
+// O arquivo leva a escolha de scripts do perfil e o código de todos os scripts adicionados,
+// mais os módulos do app que foram editados. As listas de perfis do navegador ficam de fora:
+// são de cada máquina.
+const TIPO_EXPORTACAO = 'painel-de-scripts/perfil';
+
+function exportarPerfilApp(id) {
+    const perfil = perfisApp.perfis.find(p => p.id === id);
+    const escolha = id === perfisApp.ativo ? config.scripts : (perfil.scripts || {});
+    const scripts = Object.values(SCRIPTS)
+        .filter(s => !s.embutido || s.editado)
+        .map(s => ({ id: s.id, nome: s.nome, embutido: s.embutido, codigo: s.fonte }));
+    return {
+        tipo: TIPO_EXPORTACAO, formato: 1, versaoApp: VERSAO, exportadoEm: new Date().toISOString(),
+        perfil: { nome: perfil.nome, cor: perfil.cor, scripts: escolha },
+        scripts
+    };
+}
+
+async function importarPerfilApp(dados) {
+    if (dados?.tipo !== TIPO_EXPORTACAO || !dados.perfil || !Array.isArray(dados.scripts)) {
+        return { erro: 'Este arquivo não é um perfil exportado pelo Painel de Scripts.' };
+    }
+    const nome = String(dados.perfil.nome || '').trim().slice(0, 30) || 'Importado';
+    const res = { nome, novos: 0, atualizados: 0, iguais: 0, invalidos: [], falhasRequire: [] };
+    const idNovo = {};
+
+    for (const sc of dados.scripts) {
+        const codigo = String(sc.codigo || '');
+        const v = validarScript(codigo);
+        if (v.erro) { res.invalidos.push(`${sc.nome || sc.id}: ${v.erro}`); continue; }
+        if (sc.embutido) {
+            const e = embutidoPorId(sc.id);
+            if (!e || MODULOS_RETIRADOS.includes(sc.id)) { res.invalidos.push(`${sc.nome}: o módulo não existe nesta versão do app.`); continue; }
+            const arq = path.join(PASTA_MODULOS, e.arquivo);
+            if (fs.existsSync(arq) && sha(fs.readFileSync(arq, 'utf8')) === sha(codigo)) res.iguais++;
+            else { fs.writeFileSync(arq, codigo); res.atualizados++; }
+            idNovo[sc.id] = sc.id;
+            continue;
+        }
+        // Mesmo código já instalado: reaproveita. Mesmo id: é o mesmo script, atualiza o código.
+        const mesmoCodigo = config.scriptsExtras.find(x => SCRIPTS[x.id] && sha(SCRIPTS[x.id].fonte) === sha(codigo));
+        const mesmoId = config.scriptsExtras.find(x => x.id === sc.id);
+        let id;
+        if (mesmoCodigo) { id = mesmoCodigo.id; res.iguais++; }
+        else if (mesmoId) {
+            id = mesmoId.id;
+            fs.writeFileSync(path.join(PASTA_SCRIPTS, mesmoId.arquivo), codigo);
+            res.atualizados++;
+        } else {
+            const base = (String(sc.id || '').replace(/[^a-zA-Z0-9_-]/g, '') || 'script').slice(0, 40);
+            id = base;
+            for (let i = 2; SCRIPTS[id] || config.scriptsExtras.some(x => x.id === id) || id === 'painel' || id.startsWith('mod-'); i++) id = `${base}-${i}`;
+            config.scriptsExtras.push({ id, arquivo: `${id}.user.js` });
+            fs.writeFileSync(path.join(PASTA_SCRIPTS, `${id}.user.js`), codigo);
+            for (const p of perfisApp.perfis) (p.scripts = p.scripts || {})[id] = false;
+            config.scripts[id] = false;
+            res.novos++;
+        }
+        idNovo[sc.id] = id;
+        res.falhasRequire.push(...await baixarRequires(v.meta));
+    }
+
+    carregarListaScripts();
+    const escolha = {};
+    for (const [id, ligado] of Object.entries(dados.perfil.scripts || {})) {
+        const alvo = idNovo[id] || id;
+        if (SCRIPTS[alvo]) escolha[alvo] = Boolean(ligado);
+    }
+
+    let perfil = perfisApp.perfis.find(p => p.nome.toLowerCase() === nome.toLowerCase());
+    res.perfilExistia = Boolean(perfil);
+    if (!perfil) {
+        const cor = CORES_PERFIL.includes(dados.perfil.cor) ? dados.perfil.cor : CORES_PERFIL[0];
+        perfil = montarPerfilApp(nome, cor, config);
+        // Perfil novo: só fica ligado o que estava ligado no arquivo.
+        perfil.scripts = Object.fromEntries(Object.keys(SCRIPTS).map(id => [id, false]));
+        perfisApp.perfis.push(perfil);
+    }
+    if (perfil.id === perfisApp.ativo) Object.assign(config.scripts, escolha);
+    else perfil.scripts = { ...(perfil.scripts || {}), ...escolha };
+    res.ligados = Object.values(escolha).filter(Boolean).length;
+    res.ativo = perfil.id === perfisApp.ativo;
+    salvarConfig();
+    await recarregarScripts({ recarregarAbas: false });
+    log(`Perfil importado: ${nome} (${res.novos} scripts novos, ${res.atualizados} atualizados, ${res.iguais} já existiam).`);
+    for (const x of res.invalidos) log('Não importado:', x);
+    return res;
+}
+
 async function excluirPerfilApp(id) {
     if (id === perfisApp.ativo) await trocarPerfilApp(perfisApp.perfis.find(p => p.id !== id).id);
     const nome = perfisApp.perfis.find(p => p.id === id).nome;
@@ -1310,6 +1400,18 @@ async function tratarApi(caminho, corpoRecebido) {
             await excluirPerfilApp(corpo.id);
             notificarHub();
             return resp(200, { ok: true });
+        }
+
+        case '/api/perfis-app/exportar': {
+            if (!perfisApp.perfis.some(p => p.id === corpo.id)) return resp(404, { erro: 'Perfil não encontrado.' });
+            return resp(200, { ok: true, dados: exportarPerfilApp(corpo.id) });
+        }
+
+        case '/api/perfis-app/importar': {
+            const r = await importarPerfilApp(corpo.dados);
+            if (r.erro) return resp(400, { erro: r.erro });
+            notificarHub();
+            return resp(200, { ok: true, ...r });
         }
 
         case '/api/abrir': {

@@ -59,7 +59,7 @@ button,select,input{font:inherit;color:inherit}
 .perfil-opcao small{display:block;color:var(--tinta-2);font-size:13px}
 .perfil-opcao>span:not(.perfil-ponto){min-width:0;flex:1}
 .perfil-opcao>i{color:var(--vinho)}
-.perfil-novo{padding:8px}
+.perfil-novo{padding:8px;display:grid;gap:6px}
 .perfil-novo .btn{width:100%;justify-content:center}
 .modal.modal-perfil{align-items:center}
 .modal-perfil .modal-caixa{width:min(460px,100%)}
@@ -927,9 +927,13 @@ button.carimbo:hover{background:var(--papel)}
           <span><strong>${esc(p.nome)}</strong><small>${textoScripts(p.ligados)}</small></span>
           ${p.id === ativo ? '<i class="fa-solid fa-check" aria-label="Em uso"></i>' : ''}
         </button>
+        <button type="button" class="btn-ico" data-pf-exportar="${esc(p.id)}" title="Exportar ${esc(p.nome)} para um arquivo (levar para outra máquina)" aria-label="Exportar ${esc(p.nome)}"><i class="fa-solid fa-file-export"></i></button>
         <button type="button" class="btn-ico" data-pf-editar="${esc(p.id)}" title="Editar ${esc(p.nome)}" aria-label="Editar ${esc(p.nome)}"><i class="fa-solid fa-pen"></i></button>
         ${lista.length > 1 ? `<button type="button" class="btn-ico perigo" data-pf-excluir="${esc(p.id)}" title="Excluir ${esc(p.nome)}" aria-label="Excluir ${esc(p.nome)}"><i class="fa-regular fa-trash-can"></i></button>` : ''}
-      </div>`).join('') + '<div class="perfil-novo"><button type="button" class="btn btn-ghost btn-mini" data-pf-novo><i class="fa-solid fa-plus"></i> Novo perfil</button></div>';
+      </div>`).join('') + `<div class="perfil-novo">
+        <button type="button" class="btn btn-ghost btn-mini" data-pf-novo><i class="fa-solid fa-plus"></i> Novo perfil</button>
+        <button type="button" class="btn btn-ghost btn-mini" data-pf-importar title="Abrir um arquivo de perfil exportado em outra máquina"><i class="fa-solid fa-file-import"></i> Importar perfil</button>
+      </div>`;
   }
   function menuPerfis(abrir) {
     $('#perfil-menu').hidden = !abrir;
@@ -979,6 +983,32 @@ button.carimbo:hover{background:var(--papel)}
     const editar = e.target.closest('[data-pf-editar]');
     if (editar) return abrirModalPerfil(achar(editar.dataset.pfEditar));
     if (e.target.closest('[data-pf-novo]')) return abrirModalPerfil(null);
+    const exportar = e.target.closest('[data-pf-exportar]');
+    if (exportar) {
+      menuPerfis(false);
+      try {
+        const r = await api('/api/perfis-app/exportar-arquivo', { id: exportar.dataset.pfExportar });
+        if (!r.cancelado) avisar(`Perfil exportado com ${r.scripts} ${r.scripts === 1 ? 'script' : 'scripts'}: ${r.arquivo}`);
+      } catch (err) { avisar(err.message, 'erro'); }
+      return;
+    }
+    if (e.target.closest('[data-pf-importar]')) {
+      menuPerfis(false);
+      try {
+        const r = await api('/api/perfis-app/importar-arquivo', {});
+        if (r.cancelado) return;
+        const partes = [`Perfil ${r.nome} ${r.perfilExistia ? 'atualizado' : 'criado'}: ${textoScripts(r.ligados)}`];
+        if (r.novos) partes.push(`${r.novos} ${r.novos === 1 ? 'script novo' : 'scripts novos'}`);
+        if (r.atualizados) partes.push(`${r.atualizados} ${r.atualizados === 1 ? 'atualizado' : 'atualizados'}`);
+        let msg = partes.join(', ') + '.';
+        if (r.invalidos.length) msg += ` ${r.invalidos.length} não ${r.invalidos.length === 1 ? 'entrou' : 'entraram'} (veja o registro).`;
+        if (!r.ativo) msg += ' Troque para ele no menu de perfis para usar.';
+        if (r.ativo) avisar(msg + ' Recarregue as abas para aplicar.', 'ok', { texto: 'Recarregar abas', acao: recarregarAbas });
+        else avisar(msg, r.invalidos.length ? 'erro' : 'ok');
+      } catch (err) { avisar(err.message, 'erro'); }
+      atualizar();
+      return;
+    }
     const excluir = e.target.closest('[data-pf-excluir]');
     if (excluir) {
       const p = achar(excluir.dataset.pfExcluir);

@@ -82,6 +82,34 @@ async function iniciarApp() {
 
     atualizador.configurar({ versaoAtual: VERSAO, empacotado: app.isPackaged, logger: nucleo.log, aoMudar: avisarJanela });
 
+    // Exportar/importar perfil: as janelas de salvar e abrir arquivo são do Electron, o resto é do núcleo.
+    const ok = dados => ({ status: 200, dados });
+    async function exportarPerfilParaArquivo(e, corpo) {
+        const r = await nucleo.tratarApi('/api/perfis-app/exportar', corpo);
+        if (r.status !== 200) return r;
+        const nomeArquivo = `perfil-${r.dados.dados.perfil.nome.replace(/[\\/:*?"<>|]+/g, '_')}.painel.json`;
+        const escolha = await dialog.showSaveDialog(BrowserWindow.fromWebContents(e.sender), {
+            title: 'Exportar perfil',
+            defaultPath: path.join(app.getPath('desktop'), nomeArquivo),
+            filters: [{ name: 'Perfil do Painel de Scripts', extensions: ['json'] }]
+        });
+        if (escolha.canceled || !escolha.filePath) return ok({ cancelado: true });
+        require('fs').writeFileSync(escolha.filePath, JSON.stringify(r.dados.dados, null, 2));
+        return ok({ ok: true, arquivo: escolha.filePath, scripts: r.dados.dados.scripts.length });
+    }
+    async function importarPerfilDeArquivo(e) {
+        const escolha = await dialog.showOpenDialog(BrowserWindow.fromWebContents(e.sender), {
+            title: 'Importar perfil',
+            properties: ['openFile'],
+            filters: [{ name: 'Perfil do Painel de Scripts', extensions: ['json'] }]
+        });
+        if (escolha.canceled || !escolha.filePaths.length) return ok({ cancelado: true });
+        let dados;
+        try { dados = JSON.parse(require('fs').readFileSync(escolha.filePaths[0], 'utf8')); }
+        catch { return { status: 400, dados: { erro: 'Não consegui ler o arquivo: ele não é um perfil exportado pelo Painel.' } }; }
+        return nucleo.tratarApi('/api/perfis-app/importar', { dados });
+    }
+
     protocol.handle('painel', req => {
         const { host, pathname } = new URL(req.url);
         const arquivo = host === 'hub' ? ARQUIVOS[pathname] : null;
@@ -95,6 +123,8 @@ async function iniciarApp() {
             // A atualização é um assunto só do Electron: fica fora do núcleo, atendida aqui.
             if (caminho === '/api/atualizacao/verificar') { atualizador.verificar(); return { status: 200, dados: { ok: true } }; }
             if (caminho === '/api/atualizacao/instalar') { atualizador.instalarAgora(); return { status: 200, dados: { ok: true } }; }
+            if (caminho === '/api/perfis-app/exportar-arquivo') return exportarPerfilParaArquivo(e, corpo);
+            if (caminho === '/api/perfis-app/importar-arquivo') return importarPerfilDeArquivo(e);
             const r = await nucleo.tratarApi(caminho, corpo);
             if (caminho === '/api/estado' && r.status === 200) r.dados.atualizacao = atualizador.obterEstado();
             return r;
