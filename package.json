@@ -1,6 +1,6 @@
 {
   "name": "painel-de-scripts",
-  "version": "7.0.0-beta.6",
+  "version": "7.0.0-beta.7",
   "private": true,
   "main": "dist/principal/index.js",
   "scripts": {
