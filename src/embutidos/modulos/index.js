@@ -13,6 +13,7 @@ module.exports = [
     { id: "mod-print_reserva", modulo: "print_reserva", arquivo: "mod-print_reserva.user.js", defaultOn: true, fonte: require('./mod-print_reserva.user.txt') },
     { id: "mod-tallos_02", modulo: "tallos_02", arquivo: "mod-tallos_02.user.js", defaultOn: true, fonte: require('./mod-tallos_02.user.txt') },
     { id: "mod-tallos_barra_mensagens", modulo: "tallos_barra_mensagens", arquivo: "mod-tallos_barra_mensagens.user.js", defaultOn: true, fonte: require('./mod-tallos_barra_mensagens.user.txt') },
+    { id: "mod-tallos_ocultar_cliente", modulo: "tallos_ocultar_cliente", arquivo: "mod-tallos_ocultar_cliente.user.js", defaultOn: true, fonte: require('./mod-tallos_ocultar_cliente.user.txt') },
     { id: "mod-trocar_login_smart", modulo: "trocar_login_smart", arquivo: "mod-trocar_login_smart.user.js", defaultOn: true, fonte: require('./mod-trocar_login_smart.user.txt') },
     { id: "mod-zerar_datas", modulo: "zerar_datas", arquivo: "mod-zerar_datas.user.js", defaultOn: true, fonte: require('./mod-zerar_datas.user.txt') }
 ];

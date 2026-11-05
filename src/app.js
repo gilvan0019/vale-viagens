@@ -133,7 +133,7 @@ const MODULOS_RETIRADOS = ['mod-leitor_documento', 'mod-idade_nascimento', 'mod-
     'mod-alarme_flutuante', 'mod-colar_trecho_auto', 'mod-guanabara_print_horarios', 'mod-horario-servico',
     'mod-preencher-email', 'mod-preencher_passageiros', 'mod-remover_acentos_nomes', 'mod-reserva_automatica',
     'mod-smartbus_copiar_clique', 'mod-tallos_30min', 'mod-tallos_botoes_mensagens',
-    'mod-tallos_ocultar_botoes_barra', 'mod-tallos_ocultar_cliente', 'mod-chatpro_copiar_2'];
+    'mod-tallos_ocultar_botoes_barra', 'mod-chatpro_copiar_2'];
 
 function prepararArquivosScripts() {
     fs.mkdirSync(PASTA_MODULOS, { recursive: true });
