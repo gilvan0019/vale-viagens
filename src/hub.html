@@ -45,6 +45,14 @@ button,select,input{font:inherit;color:inherit}
 .perfil-app{position:relative}
 .perfil-btn{display:flex;align-items:center;gap:10px;height:40px;max-width:280px;padding:0 12px;border:1px solid rgba(255,255,255,.75);border-radius:3px;background:transparent;color:#fff;cursor:pointer;font:600 17px var(--cond);letter-spacing:.05em}
 .perfil-btn:hover{background:rgba(255,255,255,.12)}
+.barra-dir{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.topo-versao{display:flex;align-items:center;gap:10px;color:rgba(255,255,255,.75);font-size:14px}
+.topo-versao:empty{display:none}
+.topo-versao .btn{height:40px;padding:0 12px;font-size:15px;letter-spacing:.05em}
+.topo-versao .btn-ghost{background:transparent;color:#fff;border-color:rgba(255,255,255,.75)}
+.topo-versao .btn-ghost:hover{background:rgba(255,255,255,.12)}
+.topo-versao .btn-primary{background:#fff;color:var(--vinho)}
+.topo-versao .btn-primary:hover{background:var(--vinho-claro)}
 .perfil-btn span:not(.perfil-ponto){overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .perfil-btn i{font-size:12px}
 .perfil-ponto{flex:none;width:14px;height:14px;border-radius:50%;border:1px solid rgba(255,255,255,.7)}
@@ -160,8 +168,6 @@ button.carimbo:hover{background:var(--papel)}
 .rodape{border-top:1px solid var(--filete-forte);padding:14px 40px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;color:var(--tinta-2);font-size:14px}
 .rodape code{font-family:var(--mono);font-size:13px;color:var(--tinta);word-break:break-all}
 .rodape-info{display:flex;flex-direction:column;gap:3px}
-.rodape-versao{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.rodape-versao .btn-mini{height:28px;padding:0 10px;font-size:13px;letter-spacing:.04em}
 
 /* avisos */
 .avisos{position:fixed;right:20px;bottom:20px;display:flex;flex-direction:column;gap:8px;z-index:50;max-width:min(380px,calc(100vw - 40px))}
@@ -210,6 +216,8 @@ button.carimbo:hover{background:var(--papel)}
 .form-perfil .dica{flex-basis:100%;color:var(--tinta-3);font-size:14px}
 .edge-aviso[hidden]{display:none}
 .edge-aviso{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:16px}
+.edge-aviso .barra-progresso{flex-basis:100%}
+.edge-aviso .barra-progresso[hidden]{display:none}
 @media (max-width:760px){.atalhos{grid-template-columns:1fr}}
 
 /* scripts */
@@ -238,6 +246,7 @@ button.carimbo:hover{background:var(--papel)}
 @media (max-width:720px){.modal{padding:0}.col-acoes{width:auto}}
 .modal.modal-atualizacao{align-items:center;z-index:90}
 .modal-atualizacao .modal-caixa{width:min(480px,100%)}
+.modal-atualizacao [hidden]{display:none!important}
 .modal-atualizacao .modal-corpo{padding:18px;gap:14px}
 .modal-atualizacao p{margin:0;color:var(--tinta-2);line-height:1.45}
 .modal-atualizacao .alerta{color:var(--tinta);font-weight:600}
@@ -260,11 +269,14 @@ button.carimbo:hover{background:var(--papel)}
 <body>
 <header class="barra">
   <div class="marca">Painel de Scripts <span class="selo">SmartBus + Tallos</span></div>
+  <div class="barra-dir">
+  <div class="topo-versao" id="topo-versao" aria-live="polite"></div>
   <div class="perfil-app" id="perfil-app">
     <button type="button" class="perfil-btn" id="perfil-btn" title="Trocar de perfil" aria-haspopup="true" aria-expanded="false">
       <span class="perfil-ponto" id="perfil-ponto"></span><span id="perfil-nome">Perfil</span><i class="fa-solid fa-chevron-down"></i>
     </button>
     <div class="perfil-menu" id="perfil-menu" hidden></div>
+  </div>
   </div>
 </header>
 <div class="offline" id="offline" hidden>O Painel de Scripts foi fechado. Abra pelo atalho na Área de Trabalho ou no Menu Iniciar.</div>
@@ -287,6 +299,7 @@ button.carimbo:hover{background:var(--papel)}
     <div class="via edge-aviso" id="edge-aviso" hidden>
       <span id="edge-aviso-texto"></span>
       <button class="btn btn-primary" id="btn-copiar-perfis"><i class="fa-regular fa-copy"></i> Copiar perfis do <span class="nv">Edge</span></button>
+      <div class="barra-progresso" id="copia-progresso" role="progressbar" aria-label="Copiando os perfis" hidden><i></i></div>
     </div>
     <div class="atalhos">
       <div class="card">
@@ -338,7 +351,6 @@ button.carimbo:hover{background:var(--papel)}
 <footer class="rodape">
   <div class="rodape-info">
     <div>Scripts em <code id="pasta">…</code></div>
-    <div class="rodape-versao" id="rodape-versao"></div>
   </div>
   <div class="acoes">
     <button class="btn btn-ghost" id="btn-restaurar-removidos" hidden title="Traz de volta os módulos do app que você excluiu"><i class="fa-solid fa-rotate-left"></i> Restaurar módulos excluídos</button>
@@ -506,8 +518,11 @@ button.carimbo:hover{background:var(--papel)}
     const chave = site + '|' + nome;
     const classe = 'perfil' + (abrindo.has(chave) ? ' abrindo' : '');
     const conta = p.email ? ` (${p.email})` : '';
-    const titulo = p.existe ? `Abrir ${site === 'tallos' ? 'a Tallos' : 'a SmartBus'} no perfil ${rotulo}${conta}` : `O perfil "${rotulo}" não existe no ${NV()}`;
-    return `<button class="${classe}" data-abrir="${site}" data-perfil="${esc(nome)}" ${p.existe ? '' : 'disabled'} title="${esc(titulo)}">
+    // Sem a cópia dos perfis o navegador do Painel não abre: o botão só libera quando a cópia termina.
+    const semCopia = !E.edge.copiaPronta || E.edge.copia.rodando;
+    const titulo = semCopia ? `Copie os perfis do ${NV()} primeiro (botão acima)`
+      : p.existe ? `Abrir ${site === 'tallos' ? 'a Tallos' : 'a SmartBus'} no perfil ${rotulo}${conta}` : `O perfil "${rotulo}" não existe no ${NV()}`;
+    return `<button class="${classe}" data-abrir="${site}" data-perfil="${esc(nome)}" ${p.existe && !semCopia ? '' : 'disabled'} title="${esc(titulo)}">
       <span class="perfil-nome">${esc(rotulo)}</span></button>`;
   }
 
@@ -533,18 +548,19 @@ button.carimbo:hover{background:var(--papel)}
     $('#atalho-smartbus').innerHTML = listaPerfis('smartbus', a.smartbus);
     const aviso = $('#edge-aviso'), ed = E.edge, btn = $('#btn-copiar-perfis');
     btn.hidden = false; btn.disabled = false;
+    $('#copia-progresso').hidden = !(ed.instalado && ed.copia.rodando);
     if (!ed.instalado) {
       aviso.hidden = false; btn.hidden = true;
       $('#edge-aviso-texto').textContent = `O ${NV()} não foi encontrado neste computador. Escolha o outro navegador acima.`;
     } else if (ed.copia.rodando) {
       aviso.hidden = false; btn.disabled = true;
-      $('#edge-aviso-texto').textContent = `Copiando os perfis… ${ed.copia.arquivos} arquivos (${ed.copia.mb} MB). Não abra o ${NV()} até terminar.`;
+      $('#edge-aviso-texto').textContent = `Copiando os perfis… ${ed.copia.arquivos} arquivos (${ed.copia.mb} MB). Não abra o ${NV()} até terminar. Os botões dos perfis liberam quando a cópia acabar.`;
     } else if (ed.copia.erro) {
       aviso.hidden = false;
       $('#edge-aviso-texto').textContent = `A cópia falhou: ${ed.copia.erro}. Tente de novo.`;
     } else if (!ed.copiaPronta) {
       aviso.hidden = false;
-      $('#edge-aviso-texto').textContent = `Primeiro uso no ${NV()}: o Painel trabalha com uma cópia dos perfis do seu ${NV()}, com os logins. O seu ${NV()} normal continua igual. Clique para copiar (o ${NV()} precisa estar fechado, eu fecho para você).`;
+      $('#edge-aviso-texto').textContent = `Primeiro passo no ${NV()}: copiar os perfis. O Painel trabalha com uma cópia dos perfis do seu ${NV()}, com os logins, e o seu ${NV()} normal continua igual. Os botões dos perfis abaixo liberam quando a cópia terminar (o ${NV()} precisa estar fechado, eu fecho para você).`;
     } else aviso.hidden = true;  }
 
   const ORDEM_GRUPO = { SmartBus: 0, Tallos: 1, ChatPro: 2, Outros: 3 };
@@ -638,20 +654,21 @@ button.carimbo:hover{background:var(--papel)}
     if (a.situacao === 'verificando') return 'Procurando atualização...';
     if (a.situacao === 'baixando') return `Baixando atualização ${a.progresso}%...`;
     if (a.situacao === 'pronta') return `Atualização ${a.versaoNova} pronta`;
+    if (a.situacao === 'instalando') return `Instalando a versão ${a.versaoNova}...`;
     return '';
   }
   function renderAtualizacao() {
     const a = E.atualizacao;
     if (!a) return;
-    let html = `Painel de Scripts ${esc(a.versaoAtual)}`;
     const texto = textoAtualizacao(a);
-    if (texto) html += ` · ${esc(texto)}`;
+    let html = `<span title="Versão instalada do Painel de Scripts">v${esc(a.versaoAtual)}${texto ? ` · ${esc(texto)}` : ''}</span>`;
     if (a.situacao === 'pronta') {
-      html += ` <button class="btn btn-primary btn-mini" id="btn-instalar-atualizacao" title="Fecha e reabre o Painel já atualizado"><i class="fa-solid fa-rotate"></i> Reiniciar e instalar</button>`;
-    } else if (a.situacao !== 'verificando' && a.situacao !== 'baixando') {
-      html += ` <button class="btn btn-ghost btn-mini" id="btn-verificar-atualizacao" title="Procurar uma versão nova agora"><i class="fa-solid fa-magnifying-glass"></i> Verificar atualização</button>`;
+      html += `<button class="btn btn-primary" id="btn-instalar-atualizacao" title="Fecha e reabre o Painel já atualizado"><i class="fa-solid fa-rotate"></i> Reiniciar e instalar</button>`;
+    } else if (!['verificando', 'baixando', 'instalando'].includes(a.situacao)) {
+      html += `<button class="btn btn-ghost" id="btn-verificar-atualizacao" title="Procurar uma versão nova agora"><i class="fa-solid fa-magnifying-glass"></i> Verificar atualização</button>`;
     }
-    $('#rodape-versao').innerHTML = html;
+    const topo = $('#topo-versao');
+    if (topo.innerHTML !== html) topo.innerHTML = html;
     renderTelaAtualizacao();
   }
 
@@ -751,7 +768,7 @@ button.carimbo:hover{background:var(--papel)}
 
   $('#btn-pasta').addEventListener('click', () => acao(() => api('/api/pasta', {})));
   $('#btn-registro').addEventListener('click', () => acao(() => api('/api/registro', {})));
-  $('#rodape-versao').addEventListener('click', e => {
+  $('#topo-versao').addEventListener('click', e => {
     if (e.target.closest('#btn-instalar-atualizacao')) return instalarAtualizacao();
     if (e.target.closest('#btn-verificar-atualizacao')) return acao(() => api('/api/atualizacao/verificar', {}), 'Procurando atualização...');
   });
