@@ -1,6 +1,6 @@
 {
   "name": "painel-de-scripts",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "private": true,
   "main": "dist/principal/index.js",
   "scripts": {
@@ -40,6 +40,7 @@
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
+      "include": "build/instalador.nsh",
       "artifactName": "PainelDeScripts-Setup-${version}.${ext}"
     },
     "publish": [

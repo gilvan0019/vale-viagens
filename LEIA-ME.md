@@ -18,6 +18,8 @@ tela de controle, é a janela do app. A versão fica em `version` no `package.js
 | `src/embutidos/modulos/` | Os scripts que vêm com o app, um por arquivo (`mod-<id>.user.txt`). Para trocar um script padrão, edite ou troque o arquivo e rode `npm run gerar`. Para tirar um script das máquinas que já o têm, apague o arquivo e ponha o id em `MODULOS_RETIRADOS` (`src/app.js`). |
 | `src/icone/`, `src/vendor/` | Ícone do app e CodeMirror 5.65.16 embutido. |
 | `gerar-modulos.js` | Monta `src/embutidos/modulos/index.js` a partir dos arquivos da pasta. |
+| `src/principal/atualizador.js` | Atualização automática (electron-updater). O botão "Reiniciar e instalar" mostra a tela "Atualizando" e roda o instalador visível: só a barra de progresso, que fecha sozinha e reabre o Painel. |
+| `build/instalador.nsh` | Ajustes no instalador NSIS para a atualização: pula as telas "para quem" e final, fecha sozinho e reabre o app. A instalação normal continua igual. |
 | `publicar.js` | `npm run publicar`: gera o instalador e publica a release no GitHub (atualização automática). |
 
 ## Módulos (userscripts)

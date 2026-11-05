@@ -61,13 +61,24 @@ function criarJanela() {
     return janela.loadURL(HUB_URL);
 }
 
+// Fechar pelo Painel com uma atualização já baixada aproveita para instalar (com a janela de
+// progresso à vista e sem reabrir no fim). Sem atualização, só fecha.
+function fecharPainel() {
+    if (atualizador.temAtualizacaoPronta()) {
+        mostrarJanela();
+        atualizador.instalarAgora({ reabrir: false });
+        return;
+    }
+    app.quit();
+}
+
 function criarBandeja() {
     bandeja = new Tray(nativeImage.createFromBuffer(ICONE_PNG).resize({ width: 16, height: 16 }));
     bandeja.setToolTip('Painel de Scripts');
     bandeja.setContextMenu(Menu.buildFromTemplate([
         { label: 'Abrir o Painel', click: mostrarJanela },
         { type: 'separator' },
-        { label: 'Fechar o Painel', click: () => app.quit() }
+        { label: 'Fechar o Painel', click: fecharPainel }
     ]));
     bandeja.on('click', mostrarJanela);
 }
@@ -122,7 +133,10 @@ async function iniciarApp() {
         try {
             // A atualização é um assunto só do Electron: fica fora do núcleo, atendida aqui.
             if (caminho === '/api/atualizacao/verificar') { atualizador.verificar(); return { status: 200, dados: { ok: true } }; }
-            if (caminho === '/api/atualizacao/instalar') { atualizador.instalarAgora(); return { status: 200, dados: { ok: true } }; }
+            if (caminho === '/api/atualizacao/instalar') {
+                const r = atualizador.instalarAgora();
+                return r.ok ? { status: 200, dados: r } : { status: 409, dados: { erro: r.erro } };
+            }
             if (caminho === '/api/perfis-app/exportar-arquivo') return exportarPerfilParaArquivo(e, corpo);
             if (caminho === '/api/perfis-app/importar-arquivo') return importarPerfilDeArquivo(e);
             const r = await nucleo.tratarApi(caminho, corpo);
@@ -136,7 +150,7 @@ async function iniciarApp() {
     app.on('will-quit', () => nucleo.salvarPendente());
 
     Menu.setApplicationMenu(null);
-    await nucleo.iniciar({ aoMudar: avisarJanela, sair: () => app.quit() });
+    await nucleo.iniciar({ aoMudar: avisarJanela, sair: fecharPainel });
     criarBandeja();
     await criarJanela();
     atualizador.iniciarVerificacoesPeriodicas();

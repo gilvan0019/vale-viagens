@@ -236,6 +236,16 @@ button.carimbo:hover{background:var(--papel)}
 .modal-pe .erro{color:var(--recus);font-weight:600}
 .aviso .btn-mini{margin-left:auto}
 @media (max-width:720px){.modal{padding:0}.col-acoes{width:auto}}
+.modal.modal-atualizacao{align-items:center;z-index:90}
+.modal-atualizacao .modal-caixa{width:min(480px,100%)}
+.modal-atualizacao .modal-corpo{padding:18px;gap:14px}
+.modal-atualizacao p{margin:0;color:var(--tinta-2);line-height:1.45}
+.modal-atualizacao .alerta{color:var(--tinta);font-weight:600}
+.modal-atualizacao .erro{color:var(--recus);font-weight:600}
+.barra-progresso{position:relative;height:10px;background:var(--vinho-claro);border:1px solid var(--via-filete);overflow:hidden}
+.barra-progresso i{position:absolute;inset:0 auto 0 0;width:35%;background:var(--vinho);animation:progresso-vai 1.3s ease-in-out infinite}
+@keyframes progresso-vai{0%{left:-35%}100%{left:100%}}
+@media (prefers-reduced-motion:reduce){.barra-progresso i{animation:none;width:100%;opacity:.6}}
 @media (max-width:900px){.grade{grid-template-columns:1fr}}
 @media (max-width:720px){
   .barra,.abas,.rodape{padding-left:16px;padding-right:16px}
@@ -341,6 +351,30 @@ button.carimbo:hover{background:var(--papel)}
 </footer>
 
 <div class="avisos" id="avisos" aria-live="polite"></div>
+
+<div class="modal modal-atualizacao" id="atualizando" hidden role="alertdialog" aria-modal="true" aria-labelledby="at-titulo" aria-describedby="at-texto">
+  <div class="modal-caixa">
+    <div class="modal-cab"><h2 id="at-titulo">Atualizando o Painel</h2></div>
+    <div class="modal-corpo">
+      <div id="at-andamento">
+        <p id="at-texto">Preparando a versão nova...</p>
+        <div class="barra-progresso" role="progressbar" aria-label="Instalando atualização" style="margin:14px 0"><i></i></div>
+        <p>O Painel vai fechar e a janela de instalação aparece com o progresso. <span id="at-reabre">Quando terminar, o Painel abre sozinho.</span></p>
+        <p class="alerta" style="margin-top:10px">Aguarde: não abra o Painel nem desligue o computador até terminar.</p>
+      </div>
+      <div id="at-falha" hidden>
+        <p class="erro" id="at-erro"></p>
+      </div>
+    </div>
+    <div class="modal-pe" id="at-pe" hidden>
+      <span class="info">O Painel continua na versão atual.</span>
+      <span>
+        <button class="btn btn-ghost" id="at-fechar">Fechar</button>
+        <button class="btn btn-primary" id="at-tentar"><i class="fa-solid fa-rotate"></i> Tentar de novo</button>
+      </span>
+    </div>
+  </div>
+</div>
 
 <div class="modal modal-perfil" id="perfil-modal" hidden role="dialog" aria-modal="true" aria-labelledby="pf-titulo">
   <div class="modal-caixa">
@@ -618,7 +652,45 @@ button.carimbo:hover{background:var(--papel)}
       html += ` <button class="btn btn-ghost btn-mini" id="btn-verificar-atualizacao" title="Procurar uma versão nova agora"><i class="fa-solid fa-magnifying-glass"></i> Verificar atualização</button>`;
     }
     $('#rodape-versao').innerHTML = html;
+    renderTelaAtualizacao();
   }
+
+  // Tela que cobre o Painel enquanto a atualização é instalada. Abre no clique (ou quando o
+  // processo principal avisa que está instalando) e só sai se a instalação falhar.
+  let telaAtualizacao = false, erroAtualizacao = '';
+  function abrirTelaAtualizacao() {
+    telaAtualizacao = true;
+    erroAtualizacao = '';
+    if (E?.atualizacao) E.atualizacao.erro = '';
+    renderTelaAtualizacao();
+  }
+  function renderTelaAtualizacao() {
+    const a = E?.atualizacao || {};
+    if (a.situacao === 'instalando') telaAtualizacao = true;
+    $('#atualizando').hidden = !telaAtualizacao;
+    if (!telaAtualizacao) return;
+    const erro = a.situacao === 'instalando' ? '' : (a.erro || erroAtualizacao);
+    const falhou = Boolean(erro);
+    $('#at-andamento').hidden = falhou;
+    $('#at-falha').hidden = !falhou;
+    $('#at-pe').hidden = !falhou;
+    $('#at-tentar').hidden = a.situacao !== 'pronta';
+    $('#at-titulo').textContent = falhou ? 'A atualização não foi instalada' : 'Atualizando o Painel';
+    if (falhou) {
+      $('#at-erro').textContent = erro;
+    } else {
+      $('#at-texto').textContent = `Instalando a versão ${a.versaoNova || 'nova'}...`;
+      $('#at-reabre').hidden = a.reabrir === false;
+    }
+  }
+  async function instalarAtualizacao() {
+    abrirTelaAtualizacao();
+    try { await api('/api/atualizacao/instalar', {}); }
+    catch (e) { erroAtualizacao = e.message; renderTelaAtualizacao(); }
+    atualizar();
+  }
+  $('#at-fechar').addEventListener('click', () => { telaAtualizacao = false; renderTelaAtualizacao(); });
+  $('#at-tentar').addEventListener('click', instalarAtualizacao);
 
   function render() {
     if (!E) return;
@@ -680,13 +752,17 @@ button.carimbo:hover{background:var(--papel)}
   $('#btn-pasta').addEventListener('click', () => acao(() => api('/api/pasta', {})));
   $('#btn-registro').addEventListener('click', () => acao(() => api('/api/registro', {})));
   $('#rodape-versao').addEventListener('click', e => {
-    if (e.target.closest('#btn-instalar-atualizacao')) return acao(() => api('/api/atualizacao/instalar', {}));
+    if (e.target.closest('#btn-instalar-atualizacao')) return instalarAtualizacao();
     if (e.target.closest('#btn-verificar-atualizacao')) return acao(() => api('/api/atualizacao/verificar', {}), 'Procurando atualização...');
   });
 
   $('#btn-sair').addEventListener('click', async () => {
     if (!confirm('Fechar o Painel de Scripts? Os scripts param de funcionar nas abas até você abrir o Painel de novo.')) return;
+    // Com atualização baixada, fechar instala antes (o processo principal cuida disso) e a
+    // tela de "Atualizando" fica à vista até o Painel fechar.
+    if (E?.atualizacao?.situacao === 'pronta') { abrirTelaAtualizacao(); E.atualizacao.reabrir = false; renderTelaAtualizacao(); }
     try { await api('/api/sair', {}); } catch {}
+    if (telaAtualizacao) return atualizar();
     document.body.innerHTML = '<div style="display:grid;place-items:center;min-height:100vh;font:600 18px Barlow,sans-serif;color:#4b5260;text-align:center;padding:24px">O Painel de Scripts foi fechado.<br>Para abrir de novo, use o atalho na Área de Trabalho ou no Menu Iniciar.</div>';
     setTimeout(() => window.close(), 1500);
   });
