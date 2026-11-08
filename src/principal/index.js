@@ -2,7 +2,7 @@
 'use strict';
 
 const path = require('path');
-const { app, BrowserWindow, Menu, Tray, dialog, ipcMain, nativeImage, protocol } = require('electron');
+const { app, BrowserWindow, Menu, Tray, dialog, ipcMain, nativeImage, protocol, powerMonitor } = require('electron');
 const { version: VERSAO } = require('../../package.json');
 const atualizador = require('./atualizador.js');
 
@@ -139,7 +139,12 @@ async function iniciarApp() {
             }
             if (caminho === '/api/perfis-app/exportar-arquivo') return exportarPerfilParaArquivo(e, corpo);
             if (caminho === '/api/perfis-app/importar-arquivo') return importarPerfilDeArquivo(e);
-            const r = await nucleo.tratarApi(caminho, corpo);
+            // Nunca deixa o hub travado esperando pra sempre: se o núcleo ficar pendurado numa
+            // ligação zumbi com o navegador, a tela recebe um erro em vez de ficar sem resposta.
+            const r = await Promise.race([
+                nucleo.tratarApi(caminho, corpo),
+                new Promise(resolve => setTimeout(() => resolve({ status: 504, dados: { erro: 'Demorou demais para responder. Tente de novo.' } }), 20000))
+            ]);
             if (caminho === '/api/estado' && r.status === 200) r.dados.atualizacao = atualizador.obterEstado();
             return r;
         } catch (erro) {
@@ -148,6 +153,10 @@ async function iniciarApp() {
     });
     app.on('before-quit', () => { saindo = true; });
     app.on('will-quit', () => nucleo.salvarPendente());
+    // Depois de suspensão/tela bloqueada (ausência longa), confirma na hora se a ligação com o
+    // navegador ainda responde, em vez de esperar o próximo tique do heartbeat.
+    powerMonitor.on('resume', () => nucleo.aoRetomar());
+    powerMonitor.on('unlock-screen', () => nucleo.aoRetomar());
 
     Menu.setApplicationMenu(null);
     await nucleo.iniciar({ aoMudar: avisarJanela, sair: fecharPainel });

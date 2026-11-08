@@ -61,6 +61,14 @@ const log = (...a) => {
 };
 const sha = t => crypto.createHash('sha1').update(t).digest('hex');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+// Nunca deixa travado: se a promessa não resolver em `ms`, devolve `padrao` (a promessa original
+// segue correndo sozinha, mas não bloqueia mais nada).
+function comTimeout(promessa, ms, padrao) {
+    return new Promise(resolve => {
+        const t = setTimeout(() => resolve(padrao), ms);
+        promessa.then(v => { clearTimeout(t); resolve(v); }, () => { clearTimeout(t); resolve(padrao); });
+    });
+}
 
 function lerJSON(arq, padrao) {
     try { return JSON.parse(fs.readFileSync(arq, 'utf8')); } catch { return padrao; }
@@ -622,6 +630,23 @@ async function conectarEdge() {
     try { return await conectando; } finally { conectando = null; }
 }
 
+// A conexão pode ficar "zumbi" (socket preso, sem fechar limpo) depois de uma ausência longa,
+// sem nunca disparar o 'disconnected' acima — e nesse caso o loop de reconexão (que só reage
+// quando `browser` fica null) nunca age. Esta função testa de verdade com um comando CDP e,
+// se não responder, força o reset.
+async function verificarVivo() {
+    if (!browser?.connected) return;
+    const esteBrowser = browser;
+    const vivo = await comTimeout(browser.version().then(() => true), 5000, false);
+    if (!vivo && browser === esteBrowser) {
+        log(`O ${nav().nome} do Painel parou de responder (provável ausência longa); reconectando.`);
+        try { browser.disconnect(); } catch {}
+        browser = null;
+        paginas.clear();
+        notificarHub();
+    }
+}
+
 async function esperarEdge(segundos) {
     for (let i = 0; i < segundos * 2; i++) {
         if (await conectarEdge()) return true;
@@ -642,10 +667,12 @@ let wsAtual = '';
 async function alvosDoEdge() {
     if (!browser?.connected) return [];
     try {
-        const s = await browser.target().createCDPSession();
-        const { targetInfos } = await s.send('Target.getTargets');
-        s.detach().catch(() => {});
-        return targetInfos.filter(t => t.type === 'page');
+        return await comTimeout((async () => {
+            const s = await browser.target().createCDPSession();
+            const { targetInfos } = await s.send('Target.getTargets');
+            s.detach().catch(() => {});
+            return targetInfos.filter(t => t.type === 'page');
+        })(), 5000, []);
     } catch { return []; }
 }
 
@@ -669,9 +696,21 @@ async function perfilTemAba(dir, site) {
     const ctx = sessao.contextos[dir];
     if (!ctx) return false;
     const host = new URL(SITES[site]).hostname;
-    return (await alvosDoEdge()).some(t => {
+    const info = (await alvosDoEdge()).find(t => {
         try { return t.browserContextId === ctx && new URL(t.url).hostname === host; } catch { return false; }
     });
+    if (!info) return false;
+    // A aba pode continuar existindo (mesma URL) mas descartada/congelada pelo navegador depois
+    // de um período longo sem uso — nesse caso ela não conta como "já aberta": tenta recarregar.
+    const alvoPuppeteer = browser?.targets()?.find(t => t._targetId === info.targetId);
+    const page = alvoPuppeteer ? await alvoPuppeteer.page().catch(() => null) : null;
+    if (!page) return true; // não achei a Page do puppeteer: assume ok para não duplicar aba
+    const viva = await comTimeout(page.evaluate(() => true), 4000, false);
+    if (viva) return true;
+    log(`Aba de ${site} parece travada no perfil ${dir}; recarregando.`);
+    const recarregou = await comTimeout(page.reload({ timeout: 15000 }).then(() => true), 16000, false);
+    if (!recarregou) log(`Não consegui recarregar a aba de ${site} no perfil ${dir}; vou abrir outra.`);
+    return recarregou;
 }
 
 async function abrirNoEdge(url, nomePerfil, { app = false } = {}) {
@@ -1558,10 +1597,20 @@ async function iniciar(novosGanchos) {
     setInterval(() => { if (!browser) conectarEdge().catch(() => {}); }, 4000);
     setInterval(() => { for (const p of paginas) injetarSeFaltar(p); }, 8000);
     setInterval(notificarHub, 10000);
+    // Confirma de verdade que a conexão ainda responde (pega o caso de conexão "zumbi" depois
+    // de uma ausência longa, que não dispara 'disconnected' por conta própria).
+    setInterval(() => { verificarVivo().catch(() => {}); }, 30000);
+}
+
+// Chamado pelo processo principal quando o Windows acorda de suspensão/tela bloqueada: a
+// ausência pode ter deixado a conexão zumbi, então confirma na hora em vez de esperar o próximo
+// tique do heartbeat.
+function aoRetomar() {
+    verificarVivo().catch(() => {});
 }
 
 function salvarPendente() {
     if (timerSalvar) salvarAgora();
 }
 
-module.exports = { iniciar, tratarApi, salvarPendente, log };
+module.exports = { iniciar, tratarApi, salvarPendente, log, aoRetomar };
