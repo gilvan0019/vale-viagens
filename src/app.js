@@ -1346,13 +1346,13 @@ async function tratarApi(caminho, corpoRecebido) {
 
         case '/api/scripts/codigo': {
             const sc = SCRIPTS[corpo.id];
-            if (!sc) return resp(404, { erro: 'Script não encontrado.' });
+            if (!sc || !visivelNoPerfil(sc, perfisApp.ativo)) return resp(404, { erro: 'Script não encontrado.' });
             return resp(200, { id: sc.id, nome: sc.nome, codigo: sc.fonte, embutido: sc.embutido, original: sc.embutido ? (embutidoPorId(sc.id)?.fonte || null) : null });
         }
 
         case '/api/scripts/renomear': {
             const sc = SCRIPTS[corpo.id];
-            if (!sc) return resp(404, { erro: 'Script não encontrado.' });
+            if (!sc || !visivelNoPerfil(sc, perfisApp.ativo)) return resp(404, { erro: 'Script não encontrado.' });
             const nome = String(corpo.nome || '').trim();
             if (!nome) return resp(400, { erro: 'Digite o nome do script.' });
             const descricao = String(corpo.descricao || '').trim();
@@ -1381,7 +1381,7 @@ async function tratarApi(caminho, corpoRecebido) {
                 for (const p of perfisApp.perfis) (p.scripts = p.scripts || {})[id] = false;
                 config.scripts[id] = true;
                 salvarConfig();
-            } else if (!SCRIPTS[id]) {
+            } else if (!SCRIPTS[id] || !visivelNoPerfil(SCRIPTS[id], perfisApp.ativo)) {
                 return resp(404, { erro: 'Script não encontrado.' });
             }
             const arquivo = SCRIPTS[id]?.arquivo || config.scriptsExtras.find(x => x.id === id).arquivo;
@@ -1396,7 +1396,7 @@ async function tratarApi(caminho, corpoRecebido) {
         case '/api/scripts/remover': {
             const id = String(corpo.id || '');
             const sc = SCRIPTS[id];
-            if (!sc) return resp(404, { erro: 'Script não encontrado.' });
+            if (!sc || !visivelNoPerfil(sc, perfisApp.ativo)) return resp(404, { erro: 'Script não encontrado.' });
             // Primeiro desliga nas abas abertas (sem recarregar), depois tira da lista.
             await alternarAoVivo([id], false);
             if (sc.embutido) {
