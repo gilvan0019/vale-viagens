@@ -163,6 +163,7 @@ function prepararArquivosScripts() {
         config.hashes[e.id] = hNovo;
     }
     migrarPainelUnificado();
+    migrarDonoDosExtras();
     salvarConfig();
 }
 
@@ -342,11 +343,32 @@ function carregarListaScripts() {
             meta,
             regras: regrasDoScript(meta),
             fonte,
-            editado: Boolean(item.embutido) && sha(fonte) !== sha(embutidoPorId(item.id)?.fonte || '')
+            editado: Boolean(item.embutido) && sha(fonte) !== sha(embutidoPorId(item.id)?.fonte || ''),
+            dono: item.embutido ? null : (item.perfil || null)
         };
-        if (config.scripts[item.id] === undefined) config.scripts[item.id] = item.embutido ? item.defaultOn !== false : true;
+        // Um script adicionado só liga sozinho (padrão) no perfil que o vê; nos outros começa desligado.
+        if (config.scripts[item.id] === undefined) {
+            config.scripts[item.id] = item.embutido ? item.defaultOn !== false : visivelNoPerfil(novos[item.id], perfisApp.ativo);
+        }
     }
     SCRIPTS = novos;
+}
+
+// Um script adicionado (não embutido) só aparece e pode ser ligado no perfil que o criou.
+// Sem dono (scripts de antes desse recurso, ou ambíguos na migração) ficam visíveis a todos.
+const visivelNoPerfil = (s, perfilId) => !s.dono || s.dono === perfilId;
+
+// Scripts adicionados antes desse recurso existir não tinham dono. Se, na migração, só um
+// perfil tinha o script ligado, ele vira o dono (os outros deixam de ver o script). Se nenhum
+// ou mais de um perfil tinha ligado, fica sem dono mesmo (visível a todos, como já estava).
+function migrarDonoDosExtras() {
+    if (config.extrasComDono) return;
+    for (const extra of config.scriptsExtras) {
+        if (extra.perfil) continue;
+        const donos = perfisApp.perfis.filter(p => (p.id === perfisApp.ativo ? config.scripts : p.scripts)?.[extra.id]);
+        if (donos.length === 1) extra.perfil = donos[0].id;
+    }
+    config.extrasComDono = true;
 }
 
 let CODIGO = '';
@@ -1056,13 +1078,15 @@ function validarNomePerfil(bruto, idAtual) {
     return { nome };
 }
 
-const scriptsLigados = scripts => Object.keys(SCRIPTS).filter(id => scripts?.[id]).length;
+const scriptsLigados = (scripts, perfilId) => Object.values(SCRIPTS).filter(s => visivelNoPerfil(s, perfilId) && scripts?.[s.id]).length;
 
 function criarPerfilApp(nome, cor, base) {
     const perfil = montarPerfilApp(nome, cor, config);
     if (base === 'vazio' || base === 'todos') {
         perfil.scripts = {};
-        for (const id of [...EMBUTIDOS.map(e => e.id), ...Object.keys(SCRIPTS)]) perfil.scripts[id] = base === 'todos';
+        for (const s of Object.values(SCRIPTS)) {
+            if (visivelNoPerfil(s, perfil.id)) perfil.scripts[s.id] = base === 'todos';
+        }
     }
     perfisApp.perfis.push(perfil);
     salvarConfig();
@@ -1126,6 +1150,7 @@ async function importarPerfilApp(dados) {
     const nome = String(dados.perfil.nome || '').trim().slice(0, 30) || 'Importado';
     const res = { nome, novos: 0, atualizados: 0, iguais: 0, invalidos: [], falhasRequire: [] };
     const idNovo = {};
+    const extrasNovos = [];
 
     for (const sc of dados.scripts) {
         const codigo = String(sc.codigo || '');
@@ -1157,6 +1182,7 @@ async function importarPerfilApp(dados) {
             fs.writeFileSync(path.join(PASTA_SCRIPTS, `${id}.user.js`), codigo);
             for (const p of perfisApp.perfis) (p.scripts = p.scripts || {})[id] = false;
             config.scripts[id] = false;
+            extrasNovos.push(id);
             res.novos++;
         }
         idNovo[sc.id] = id;
@@ -1178,6 +1204,11 @@ async function importarPerfilApp(dados) {
         // Perfil novo: só fica ligado o que estava ligado no arquivo.
         perfil.scripts = Object.fromEntries(Object.keys(SCRIPTS).map(id => [id, false]));
         perfisApp.perfis.push(perfil);
+    }
+    // Scripts novos trazidos pelo arquivo passam a ser só do perfil importado, não aparecem nos outros.
+    for (const id of extrasNovos) {
+        const extra = config.scriptsExtras.find(x => x.id === id);
+        if (extra) extra.perfil = perfil.id;
     }
     if (perfil.id === perfisApp.ativo) Object.assign(config.scripts, escolha);
     else perfil.scripts = { ...(perfil.scripts || {}), ...escolha };
@@ -1250,11 +1281,11 @@ async function estadoAtual() {
             cores: CORES_PERFIL,
             lista: perfisApp.perfis.map(p => ({
                 id: p.id, nome: p.nome, cor: p.cor,
-                ligados: scriptsLigados(p.id === perfisApp.ativo ? config.scripts : p.scripts)
+                ligados: scriptsLigados(p.id === perfisApp.ativo ? config.scripts : p.scripts, p.id)
             }))
         },
         modulosRemovidos: config.modulosRemovidos.length,
-        scripts: Object.values(SCRIPTS).map(s => ({
+        scripts: Object.values(SCRIPTS).filter(s => visivelNoPerfil(s, perfisApp.ativo)).map(s => ({
             id: s.id, nome: s.nome, ativo: Boolean(config.scripts[s.id]), versao: s.meta.version || '',
             descricao: s.meta.description || '', sites: sitesCurtos(s.meta), embutido: s.embutido, grupo: s.grupo,
             editado: s.editado
@@ -1345,7 +1376,7 @@ async function tratarApi(caminho, corpoRecebido) {
                 const base = (v.meta.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'script').slice(0, 40);
                 id = base;
                 for (let i = 2; SCRIPTS[id] || config.scriptsExtras.some(x => x.id === id) || id === 'painel' || id.startsWith('mod-'); i++) id = `${base}-${i}`;
-                config.scriptsExtras.push({ id, arquivo: `${id}.user.js` });
+                config.scriptsExtras.push({ id, arquivo: `${id}.user.js`, perfil: perfisApp.ativo });
                 // O script novo fica ligado só no perfil em uso: cada perfil escolhe os seus.
                 for (const p of perfisApp.perfis) (p.scripts = p.scripts || {})[id] = false;
                 config.scripts[id] = true;
@@ -1396,8 +1427,8 @@ async function tratarApi(caminho, corpoRecebido) {
         case '/api/script':
         case '/api/scripts/todos': {
             const ids = caminho === '/api/script'
-                ? (SCRIPTS[corpo.id] ? [corpo.id] : [])
-                : Object.values(SCRIPTS).filter(x => !corpo.grupo || x.grupo === corpo.grupo).map(x => x.id);
+                ? (SCRIPTS[corpo.id] && visivelNoPerfil(SCRIPTS[corpo.id], perfisApp.ativo) ? [corpo.id] : [])
+                : Object.values(SCRIPTS).filter(x => visivelNoPerfil(x, perfisApp.ativo) && (!corpo.grupo || x.grupo === corpo.grupo)).map(x => x.id);
             if (!ids.length) return resp(400, { erro: 'Script desconhecido' });
             for (const id of ids) config.scripts[id] = Boolean(corpo.ativo);
             salvarConfig();
@@ -1419,7 +1450,7 @@ async function tratarApi(caminho, corpoRecebido) {
             if (!perfisApp.perfis.some(p => p.id === corpo.id)) return resp(404, { erro: 'Perfil não encontrado.' });
             const r = await trocarPerfilApp(corpo.id);
             notificarHub();
-            return resp(200, { ok: true, aoVivo: r.aoVivo, nome: perfilAtivo().nome, ligados: scriptsLigados(config.scripts) });
+            return resp(200, { ok: true, aoVivo: r.aoVivo, nome: perfilAtivo().nome, ligados: scriptsLigados(config.scripts, perfisApp.ativo) });
         }
 
         case '/api/perfis-app/editar': {
